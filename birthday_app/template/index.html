@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Birthday Wishes & Memories Wall</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header>
+    <h1>✨ Birthday Wishes & Photo Wall 🌸</h1>
+    <p>Klik slot pastel kosong di bawah untuk menempelkan ucapan dan foto kenanganmu!</p>
+  </header>
+
+  <!-- Papan Dinding Sticky Notes -->
+  <main id="board" class="board-grid"></main>
+
+  <!-- Modal Tambah Note -->
+  <div id="addModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeAddModal()">&times;</span>
+      <h2>Tulis Ucapan Manismu 📝</h2>
+      <form id="noteForm">
+        <label>Nama Kamu:</label>
+        <input type="text" id="senderName" required placeholder="Contoh: Budi">
+
+        <label>Pesan / Doa:</label>
+        <textarea id="noteMessage" rows="4" required placeholder="Tulis harapan dan doamu di sini..."></textarea>
+
+        <label>Foto Kenangan / Take Foto Direct:</label>
+        <input type="file" id="photoInput" accept="image/*" capture="environment">
+
+        <label>Pilih Warna Kertas Pastel:</label>
+        <div class="pastel-selector">
+          <label class="pastel-opt" style="background:#FFF2F2"><input type="radio" name="pastelColor" value="#FFF2F2" checked></label>
+          <label class="pastel-opt" style="background:#E5F9F6"><input type="radio" name="pastelColor" value="#E5F9F6"></label>
+          <label class="pastel-opt" style="background:#F0E6FF"><input type="radio" name="pastelColor" value="#F0E6FF"></label>
+          <label class="pastel-opt" style="background:#FFF9E6"><input type="radio" name="pastelColor" value="#FFF9E6"></label>
+          <label class="pastel-opt" style="background:#EBF3FF"><input type="radio" name="pastelColor" value="#EBF3FF"></label>
+        </div>
+
+        <button type="submit" class="btn-submit">Kirim & Kunci Note 🔒</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Baca Note (ReadOnly) -->
+  <div id="viewModal" class="modal">
+    <div class="modal-content read-only">
+      <span class="close" onclick="closeViewModal()">&times;</span>
+      <h3 id="viewSender"></h3>
+      <div id="viewImageContainer"></div>
+      <p id="viewMessage"></p>
+      <div class="lock-badge">🔒 Terkunci & Tidak Dapat Diedit Lagi</div>
+    </div>
+  </div>
+
+  <script>
+    const TOTAL_SLOTS = 20; 
+    let savedNotes = [];
+
+    async function fetchNotes() {
+      const res = await fetch('/api/notes');
+      savedNotes = await res.json();
+      renderBoard();
+    }
+
+    function renderBoard() {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
+
+      savedNotes.forEach((note) => {
+        const card = document.createElement('div');
+        card.className = 'sticky-note filled';
+        card.style.backgroundColor = note.color || '#FFF2F2';
+        
+        let imgTag = note.image_path ? `<img src="${note.image_path}" class="preview-img">` : '';
+        
+        card.innerHTML = `
+          <div class="pin">🎀</div>
+          <h4>Dari: ${escapeHtml(note.sender)}</h4>
+          ${imgTag}
+          <p class="truncate">${escapeHtml(note.message)}</p>
+          <span class="read-more">Klik untuk membaca 🔒</span>
+        `;
+        
+        card.onclick = () => openViewModal(note);
+        board.appendChild(card);
+      });
+
+      const emptySlots = TOTAL_SLOTS - savedNotes.length;
+      for (let i = 0; i < Math.max(emptySlots, 4); i++) {
+        const emptyCard = document.createElement('div');
+        emptyCard.className = 'sticky-note empty';
+        emptyCard.innerHTML = `
+          <div class="plus-icon">+</div>
+          <p>Tambah Ucapan</p>
+        `;
+        emptyCard.onclick = openAddModal;
+        board.appendChild(emptyCard);
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById('addModal').style.display = 'block';
+    }
+
+    function closeAddModal() {
+      document.getElementById('addModal').style.display = 'none';
+      document.getElementById('noteForm').reset();
+    }
+
+    function openViewModal(note) {
+      document.getElementById('viewSender').innerText = `Dari: ${note.sender}`;
+      document.getElementById('viewMessage').innerText = note.message;
+      
+      const imgContainer = document.getElementById('viewImageContainer');
+      imgContainer.innerHTML = note.image_path ? `<img src="${note.image_path}" class="full-img">` : '';
+      
+      document.getElementById('viewModal').style.display = 'block';
+    }
+
+    function closeViewModal() {
+      document.getElementById('viewModal').style.display = 'none';
+    }
+
+    document.getElementById('noteForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      formData.append('sender', document.getElementById('senderName').value);
+      formData.append('message', document.getElementById('noteMessage').value);
+      
+      const selectedColor = document.querySelector('input[name="pastelColor"]:checked').value;
+      formData.append('color', selectedColor);
+      
+      const fileInput = document.getElementById('photoInput');
+      if (fileInput.files[0]) {
+        formData.append('photo', fileInput.files[0]);
+      }
+
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        closeAddModal();
+        fetchNotes();
+      }
+    };
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    window.onclick = (event) => {
+      if (event.target.classList.contains('modal')) {
+        closeAddModal();
+        closeViewModal();
+      }
+    };
+
+    fetchNotes();
+  </script>
+</body>
+</html>
